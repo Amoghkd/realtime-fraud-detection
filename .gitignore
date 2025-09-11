@@ -32,4 +32,7 @@ Thumbs.db
 # Infrastructure folder (ignore all contents)
 infra/
 
+data/*
 
+
+data/

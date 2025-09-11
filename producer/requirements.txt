@@ -1,0 +1,4 @@
+kafka-python==2.0.2
+pandas==2.2.3
+numpy==1.24.4
+faker==19.6.2

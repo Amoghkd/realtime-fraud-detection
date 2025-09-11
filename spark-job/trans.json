@@ -1,0 +1,10 @@
+{"transaction_id":"t1","amount":6000,"merchant_name":"StoreA","merchant_risk":0.3,"user_id":"u1","timestamp":"2025-09-11T12:00:00"}
+{"transaction_id":"t2","amount":200,"merchant_name":"StoreB","merchant_risk":0.8,"user_id":"u2","timestamp":"2025-09-11T02:00:00"}
+{"transaction_id":"t3","amount":1500,"merchant_name":"StoreC","merchant_risk":0.5,"user_id":"u3","timestamp":"2025-09-11T23:30:00"}
+{"transaction_id":"t4","amount":3000,"merchant_name":"StoreD","merchant_risk":0.7,"user_id":"u4","timestamp":"2025-09-11T05:45:00"}
+{"transaction_id":"t5","amount":800,"merchant_name":"StoreE","merchant_risk":0.2,"user_id":"u5","timestamp":"2025-09-11T14:20:00"}
+{"transaction_id":"t6","amount":12000,"merchant_name":"StoreF","merchant_risk":0.9,"user_id":"u6","timestamp":"2025-09-11T01:15:00"}
+{"transaction_id":"t7","amount":400,"merchant_name":"StoreG","merchant_risk":0.4,"user_id":"u7","timestamp":"2025-09-11T10:10:00"}
+{"transaction_id":"t8","amount":2500,"merchant_name":"StoreH","merchant_risk":0.6,"user_id":"u8","timestamp":"2025-09-11T04:50:00"}
+{"transaction_id":"t9","amount":7000,"merchant_name":"StoreI","merchant_risk":0.3,"user_id":"u9","timestamp":"2025-09-11T16:30:00"}
+{"transaction_id":"t10","amount":500,"merchant_name":"StoreJ","merchant_risk":0.1,"user_id":"u10","timestamp":"2025-09-11T12:45:00"}

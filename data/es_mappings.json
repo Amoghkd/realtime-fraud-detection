@@ -1,0 +1,23 @@
+{
+  "mappings": {
+    "properties": {
+      "transaction": {
+        "properties": {
+          "transaction_id": {"type": "keyword"},
+          "card_id": {"type": "keyword"},
+          "merchant_id": {"type": "keyword"},
+          "amount": {"type": "double"},
+          "timestamp": {"type": "date"},
+          "lat": {"type": "double"},
+          "lon": {"type": "double"}
+        }
+      },
+      "ml": {
+        "properties": {
+          "probability": {"type": "double"},
+          "label": {"type": "integer"}
+        }
+      }
+    }
+  }
+}

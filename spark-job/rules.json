@@ -1,0 +1,18 @@
+{
+  "rule.high_value": {
+    "condition": "amount > 5000",
+    "reason": "Amount exceeds $5000"
+  },
+  "rule.velocity": {
+    "condition": "amount > 1000 and (hour >= 23 or hour <= 6)",
+    "reason": "High amount during unusual hours"
+  },
+  "rule.impossible_travel": {
+    "condition": "merchant_risk > 0.6 and amount > 2000 and (hour >= 0 and hour <= 6)",
+    "reason": "High risk merchant + early hours + high amount"
+  },
+  "ml.v1": {
+    "condition": "ml_fraud_score > 0.3",
+    "reason": "ML model detected fraud"
+  }
+}

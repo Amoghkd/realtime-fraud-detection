@@ -15,7 +15,7 @@ python generate_batch.py
 
 ---
 
-## 2. Train the ML Model
+## 2. Train the ML Model- can be improved using GNN AND SHAP 
 
 Go to the `ml_training` folder and execute the training script to produce a `.pkl` model file:
 

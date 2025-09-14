@@ -34,10 +34,10 @@ ONNX_MODEL_PATH = os.getenv("ML_MODEL_PATH", "model.onnx")
 SPARK_MASTER = os.getenv("SPARK_MASTER", "local[*]")
 
 RULES = {
-    "high_value": "High value or suspicious ML score, including late night high amounts",
-    "impossible_travel": "Impossible travel detected",
+    "high-value": "High value or suspicious ML score, including late night high amounts",
+    "impossible-travel": "Impossible travel detected",
     "velocity": "More than 5 transactions in 1 minute",
-    "ml_alert": "ML model detected fraud"
+    "ml": "ML model detected fraud"
 }
 
 # ------------------ ML scoring UDF ------------------
@@ -127,39 +127,41 @@ def process_batch(batch_df, batch_id, kafka_servers):
 
     # Alerts
     alerts = {
-        "HIGH_VALUE": df.filter((col("amount") > 5000) |
+        "HIGH-VALUE": df.filter((col("amount") > 5000) |
                                 ((col("amount") > 1000) & ((col("hour") >= 23) | (col("hour") <= 6))) |
                                 (col("ml_fraud_score") > 0.7)),
-        "IMPOSSIBLE_TRAVEL": df.filter((col("distance_km") > 500) & (col("time_diff_min") < 30)),
+        "IMPOSSIBLE-TRAVEL": df.filter((col("distance_km") > 500) & (col("time_diff_min") < 30)),
         "VELOCITY": df.filter(col("txn_count_1min") > 5),
-        "ML_ALERT": df.filter(col("ml_fraud_score") > 0.3)
+        "ML": df.filter(col("ml_fraud_score") > 0.3)
     }
 
-    def write_to_kafka(alert_df, topic, reason_key):
-        if alert_df.count() == 0:
-            return
-        (alert_df.withColumn("alert_type", lit(topic))
-                 .withColumn("reason", lit(RULES[reason_key]))
-                 .selectExpr("CAST(transaction_id AS STRING) AS key",
-                             """to_json(named_struct(
-                                'transaction_id', transaction_id,
-                                'card_id', card_id,
-                                'amount', amount,
-                                'alert_type', alert_type,
-                                'reason', reason,
-                                'ml_fraud_score', ml_fraud_score,
-                                'distance_km', distance_km,
-                                'time_diff_min', time_diff_min,
-                                'txn_count_1min', txn_count_1min
-                             )) AS value""")
-                 .write
-                 .format("kafka")
-                 .option("kafka.bootstrap.servers", kafka_servers)
-                 .option("topic", f"alerts.{topic.lower()}")
-                 .save())
+    def write_to_kafka(alert_df, topic, reason_key, kafka_servers):
+       (alert_df.withColumn("alert_type", lit(topic))
+             .withColumn("reason", lit(RULES[reason_key]))
+             .selectExpr("CAST(transaction_id AS STRING) AS key",
+                         """to_json(named_struct(
+                            'transaction_id', transaction_id,
+                            'card_id', card_id,
+                            'amount', amount,
+                            'alert_type', alert_type,
+                            'reason', reason,
+                            'ml_fraud_score', ml_fraud_score,
+                            'distance_km', distance_km,
+                            'time_diff_min', time_diff_min,
+                            'txn_count_1min', txn_count_1min
+                         )) AS value""")
+             .write
+             .format("kafka")
+             .option("kafka.bootstrap.servers", kafka_servers)
+             .option("topic", f"alerts-{topic.lower().replace('_', '-')}")
+             .mode("append")      # ✅ instead of save()
+             .save())   
+
+
 
     for k, df_alert in alerts.items():
-        write_to_kafka(df_alert, k, k.lower())
+        write_to_kafka(df_alert, k, k.lower(), kafka_servers)
+
 
 # ------------------ Main ------------------
 def main():
@@ -173,7 +175,7 @@ def main():
     df = (spark.readStream
           .format("kafka")
           .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP_SERVERS)
-          .option("subscribe", "transactions.raw")
+          .option("subscribe", "transactions-raw")
           .option("startingOffsets", "latest")
           .load())
 

@@ -15,7 +15,7 @@ USER producer
 
 # Default environment variables
 ENV KAFKA_BOOTSTRAP=kafka:9094
-ENV KAFKA_TOPIC=transactions.raw
+ENV KAFKA_TOPIC=transactions-raw
 ENV TXN_RATE=5
 
 # Run the production generator

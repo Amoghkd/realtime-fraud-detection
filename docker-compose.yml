@@ -1,111 +1,163 @@
 version: '3.8'
 
 services:
-  # Core Infrastructure
+  # Zookeeper (Confluent)
   zookeeper:
-    image: wurstmeister/zookeeper
-    ports:
-      - "2181:2181"
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
     networks:
       - fraud-net
 
+  # Kafka (Confluent)
   kafka:
-    image: wurstmeister/kafka
-    ports:
-      - "9092:9092"
-    environment:
-      KAFKA_ADVERTISED_LISTENERS: INSIDE://kafka:9094
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
-      KAFKA_LISTENERS: INSIDE://0.0.0.0:9094
-      KAFKA_INTER_BROKER_LISTENER_NAME: INSIDE
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_CREATE_TOPICS: >
-        transactions.raw:3:1,
-        alerts.high_value:3:1,
-        alerts.velocity:3:1,
-        alerts.impossible_travel:3:1,
-        alerts.ml.v1:3:1
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
     depends_on:
       - zookeeper
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    networks:
-      - fraud-net
-
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.5.0
     ports:
-      - "9200:9200"
+      - "9092:9092"
+      - "9094:9094"
     environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9094,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9094,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    networks:
+      - fraud-net
     volumes:
-      - es_data:/usr/share/elasticsearch/data
-    networks:
-      - fraud-net
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9094", "--list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  kibana:
-    image: docker.elastic.co/kibana/kibana:8.5.0
-    ports:
-      - "5601:5601"
-    environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-      - SERVER_HOST=0.0.0.0
+  kafka-setup:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka-setup
     depends_on:
-      - elasticsearch
+      kafka:
+        condition: service_healthy
+    entrypoint: [ "bash", "-c" ]
+    command: >
+      "
+      kafka-topics --bootstrap-server kafka:9094 --create --if-not-exists --topic transactions-raw --partitions 3 --replication-factor 1;
+      kafka-topics --bootstrap-server kafka:9094 --create --if-not-exists --topic alerts-high-value --partitions 3 --replication-factor 1;
+      kafka-topics --bootstrap-server kafka:9094 --create --if-not-exists --topic alerts-velocity --partitions 3 --replication-factor 1;
+      kafka-topics --bootstrap-server kafka:9094 --create --if-not-exists --topic alerts-impossible-travel --partitions 3 --replication-factor 1;
+      kafka-topics --bootstrap-server kafka:9094 --create --if-not-exists --topic alerts-ml --partitions 3 --replication-factor 1;
+      "
     networks:
       - fraud-net
 
-  logstash:
-    image: docker.elastic.co/logstash/logstash:8.5.0
-    volumes:
-      - ./logstash/pipeline:/usr/share/logstash/pipeline
-    environment:
-      - LS_JAVA_OPTS=-Xmx512m -Xms512m
-      - PIPELINE_WORKERS=1  # required for aggregate plugin
-    depends_on:
-      - kafka
-      - elasticsearch
-    ports:
-      - "5044:5044" # (optional Beats input if you extend later)
-    networks:
-      - fraud-net
-
-  fraud-detection:
-    build:
-      context: ./spark-job
-      dockerfile: Dockerfile
-    environment:
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9094
-      - ML_MODEL_PATH=/app/model.onnx
-      - SPARK_MASTER=local[*]
-    depends_on:
-      - kafka
-    networks:
-      - fraud-net
-    restart: unless-stopped
-
+  # Transaction producer (your service)
   transaction-producer:
     build:
       context: ./producer
       dockerfile: Dockerfile
+    container_name: transaction-producer
     environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9094
       - KAFKA_BOOTSTRAP=kafka:9094
       - TRANSACTIONS_PER_SECOND=1
       - FRAUD_RATE=0.8
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     networks:
       - fraud-net
     profiles:
       - testing
 
+  # Fraud detection (Spark job)
+  fraud-detection:
+    build:
+      context: ./spark-job
+      dockerfile: Dockerfile
+    container_name: fraud-detection
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9094
+      - ML_MODEL_PATH=/app/model.onnx
+      - SPARK_MASTER=local[*]
+      - CHECKPOINT_DIR=/app/checkpoints/fraud_detection
+      - STARTING_OFFSETS=latest
+    volumes:
+      - fraud_checkpoints:/app/checkpoints
+      - ./spark-job/model.onnx:/app/model.onnx:ro
+    depends_on:
+      kafka-setup:
+        condition: service_started
+    networks:
+      - fraud-net
+    restart: unless-stopped
+
+  # Elastic stack for storing/visualizing alerts
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.1
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false       # ⬅️ Corrected setting
+      - xpack.security.transport.ssl.enabled=false   # ⬅️ Corrected setting
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    networks:
+      - fraud-net
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.12.1
+    container_name: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_HOST=0.0.0.0
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - fraud-net
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.12.1
+    container_name: logstash
+    volumes:
+      - ./logstash/pipeline:/usr/share/logstash/pipeline
+    environment:
+      - LS_JAVA_OPTS=-Xmx512m -Xms512m
+      - PIPELINE_WORKERS=1
+    depends_on:
+      kafka-setup:
+        condition: service_started
+      elasticsearch:
+        condition: service_healthy
+    ports:
+      - "5044:5044"
+    networks:
+      - fraud-net
+
 volumes:
   es_data:
+  kafka_data:
+  fraud_checkpoints:
 
 networks:
   fraud-net:

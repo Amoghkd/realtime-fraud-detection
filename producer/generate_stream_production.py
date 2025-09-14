@@ -293,7 +293,7 @@ def stream_loop(producer, agents, merchants, rate_per_sec, topic, fraud_rate):
 def main():
     parser = argparse.ArgumentParser(description="Production Transaction Generator")
     parser.add_argument("--kafka", action="store_true", help="Send to Kafka (default: print to stdout)")
-    parser.add_argument("--rate", type=int, default=10, help="Transactions per second")
+    parser.add_argument("--rate", type=int, default=10,help="Transactions per second")
     parser.add_argument("--topic", default=os.getenv("KAFKA_TOPIC", "transactions-raw"), help="Kafka topic")
     parser.add_argument(
         "--bootstrap-servers",

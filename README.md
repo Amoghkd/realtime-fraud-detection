@@ -1,35 +1,71 @@
-# Real-time Fraud Detection Pipeline
+# distributed real time fraud detection system Execution Instructions
 
-This repository contains a complete example of a real-time fraud detection pipeline combining rule-based detection and ML scoring.
+This guide explains the step-by-step process to execute the machine learning pipeline for the `realtime-fraud-detection` project. Follow these instructions to generate data, train a model, convert it to ONNX format, and run the complete system using Docker Compose.
 
-Quick start:
+---
 
-1. Start infrastructure:
+## 1. Generate Batch Data
 
-   docker-compose -f infra/docker-compose.yml up -d
+Navigate to the appropriate directory and run the batch data generation script:
 
-2. Generate dataset:
+```bash
+python generate_batch.py
+```
+*This step prepares the data required for model training.*
 
-   python3 dataset-generator/generate_transactions.py --n 50000
+---
 
-3. Create Kafka topics and ES index mappings:
+## 2. Train the ML Model
 
-   infra/kafka-init.sh
-   infra/es-init.sh
+Go to the `ml_training` folder and execute the training script to produce a `.pkl` model file:
 
-4. Start producer:
+```bash
+cd ml_training
+python train_model.py
+```
+*After successful completion, a `.pkl` file will be generated in the `ml_training` folder.*
 
-   python3 producer/producer.py --file data/transactions_50k.csv --delay-ms 20
+---
 
-5. Train model (optional):
+## 3. Convert the Model to ONNX Format
 
-   python3 ml-training/train_model.py
+Convert the trained `.pkl` model to ONNX format:
 
-6. Start ml-service and api (or run via docker-compose builds)
+```bash
+python pkltoonnx.py
+```
+*This will create an ONNX model file.*
 
-7. Submit Spark job:
+---
 
-   cd spark-job
-   ./spark-submit.sh
+## 4. Place the ONNX Model in the Spark Job Folder
 
-Open Kibana: http://localhost:5601
+Move the generated ONNX file from the `ml_training` folder to the `spark_job` folder:
+
+```bash
+mv ml_training/model.onnx spark_job/
+```
+*The ONNX model is now ready to be used in the Spark job.*
+
+---
+
+## 5. Run Everything Using Docker Compose
+
+In the root directory of the repository, start all services using Docker Compose:
+
+```bash
+docker compose up -d --build
+```
+*This command will launch the complete pipeline including data processing, model inference, kafka topic creation ,starting kafka ,spark ,logstash ,elastic search and kibana *
+
+---
+
+## Summary
+
+- **Generate batch data**
+- **Train ML model (.pkl)**
+- **Convert to ONNX**
+- **Place ONNX file in `spark_job/`**
+- **Run `docker compose up` from root**
+
+Follow these steps sequentially for a successful setup and execution. If you encounter any issues, please refer to the respective script documentation or seek assistance.
